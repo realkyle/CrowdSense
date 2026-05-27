@@ -41,8 +41,10 @@ def detect_people(image_bytes: bytes) -> dict:
     # torch.no_grad() prevents PyTorch from accumulating computation graphs across
     # requests — without it, VRAM slowly fills up and inference gets slower over time.
     # save=False stops Ultralytics from writing annotated images to a runs/ directory.
+    # conf=0.25 catches small/distant people (e.g. wide-angle crowd shots) that
+    # 0.4 would miss. Lower values increase false positives on non-crowd images.
     with torch.no_grad():
-        results = model.predict(frame, classes=[0], device="cuda", conf=0.4, verbose=False, save=False)
+        results = model.predict(frame, classes=[0], device="cuda", conf=0.25, verbose=False, save=False)
 
     boxes = []
     annotated = frame.copy()

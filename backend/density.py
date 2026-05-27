@@ -2,21 +2,28 @@ import cv2
 import numpy as np
 
 
-# Thresholds are people-per-10k-pixels. These are rough starting estimates —
-# expect to tune them once you test on real images.
 def classify_density(person_count: int, frame_width: int, frame_height: int) -> tuple[str, str]:
-    """Return (label, color) for the given count and frame dimensions."""
-    frame_area = frame_width * frame_height
-    density = person_count / frame_area * 10_000
+    """
+    Return (label, color) using a hybrid of absolute count and pixel density.
 
-    if density < 1:
-        return "Empty", "green"
-    elif density < 3:
-        return "Light", "yellow"
-    elif density < 6:
+    Pure pixel-density breaks on wide-angle shots (e.g. Shibuya crossing) where
+    many people are spread across a large frame. The hybrid triggers on whichever
+    signal fires first, so close-up and aerial shots both classify correctly.
+    """
+    frame_area = frame_width * frame_height
+    pixel_density = person_count / frame_area * 10_000
+
+    # Packed:   30+ people OR very high pixel density (close-up)
+    if person_count >= 30 or pixel_density >= 3:
+        return "Packed",   "red"
+    # Moderate: 15+ people OR medium pixel density
+    elif person_count >= 15 or pixel_density >= 1.5:
         return "Moderate", "orange"
+    # Light:    5+ people OR any detectable density
+    elif person_count >= 5 or pixel_density >= 0.5:
+        return "Light",    "yellow"
     else:
-        return "Packed", "red"
+        return "Empty",    "green"
 
 
 def generate_heatmap(

@@ -30,6 +30,13 @@ node_modules/
 frontend/build/
 frontend/dist/
 
+# Sample assets — images are committed, videos are too large for git
+samples/*.mp4
+samples/*.mov
+samples/*.avi
+samples/*.webm
+samples/*.mkv
+
 # Misc
 .DS_Store
 Thumbs.db
