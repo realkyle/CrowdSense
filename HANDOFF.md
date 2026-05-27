@@ -4,200 +4,262 @@
 ---
 
 ## What Is CrowdSense?
-CrowdSense is a personal web application project that detects and estimates crowd density from images, video files, or a live camera feed. It displays results on a real-time dashboard showing annotated video/images, a density classification label, a heatmap overlay, and a crowd count graph over time.
+CrowdSense is a personal web application that detects and estimates crowd density from images, video files, or a live camera feed. It displays results on a real-time dashboard showing annotated video/images, a density classification label, a heatmap overlay, and a crowd count graph over time.
 
-This is a personal project — not a school assignment. There are no language or framework restrictions. The goal is to build something functional, modern, and impressive.
-
----
-
-## Current Status
-**Nothing has been built yet.** This document captures all planning decisions made so far. The user is about to:
-1. Create a GitHub repository
-2. Begin development on their Windows desktop machine
-3. Start with Phase 1 (static image upload) and work toward live camera feed
+This is a personal project — not a school assignment. No restrictions on language or framework.
 
 ---
 
 ## Hardware (Development Machine)
-- **OS:** Windows
-- **GPU:** NVIDIA RTX 3060 — use CUDA for all model inference
+- **OS:** Windows 10
+- **GPU:** NVIDIA RTX 3060 (12GB VRAM) — CUDA 13.3 driver
 - **CPU:** Intel i7-11700KF
 - **RAM:** 32GB DDR4
-- **Why this matters:** CUDA on the 3060 gives ~100+ FPS with YOLOv8n vs ~15-25 FPS on CPU. Always use GPU. Do not develop on the user's Mac M1 laptop — CUDA is not supported there.
+- **Python:** 3.11.1
+- **Node:** 24.16.0
+
+**Always use CUDA for inference.** Do not develop on a Mac M1 — CUDA is not supported there.
 
 ---
 
-## Decided Tech Stack
+## Tech Stack (all installed and working)
 
 | Layer | Technology | Notes |
 |---|---|---|
-| Frontend | React + Tailwind CSS | Dashboard UI |
-| Backend | Python + FastAPI | API + model inference |
-| Detection Model | YOLOv8 (Ultralytics) | Pre-trained, detects people out of the box, class 0 = person |
-| Heatmap | OpenCV + NumPy | Generated from detection coordinates |
-| Charts | Recharts or Chart.js | Real-time crowd count graph |
-| Live Camera | WebSockets | Stream frames backend → frontend |
-| Static/Upload | REST API (HTTP) | POST image/video, receive annotated result |
+| Frontend | React + Tailwind CSS (Vite) | Port 3000 |
+| Backend | Python + FastAPI + uvicorn | Port 8000 |
+| Detection | YOLOv8s (Ultralytics) | `yolov8s.pt` — auto-downloads |
+| Heatmap | OpenCV + NumPy | Gaussian blobs + COLORMAP_JET |
+| Charts | Recharts | Line chart for video timeline |
+| Live camera | WebSockets (Phase 3 — not built yet) | |
 
 ---
 
-## Why These Choices Were Made
-- **YOLOv8** was chosen because it requires zero training, downloads automatically via the Ultralytics library, runs in one line of Python, and supports CUDA natively. It detects people (class 0) out of the box.
-- **FastAPI** was chosen over Flask for speed and built-in async support (needed for WebSockets and live feed).
-- **React + Tailwind** for a modern, fast-to-build dashboard UI.
-- **No machine learning training required** — purely inference on a pre-trained model.
+## Running the Project
 
----
+```bash
+# Backend (from backend/)
+python -m uvicorn main:app --reload --port 8000
 
-## Core Logic Decisions
-
-### Person Detection
-```python
-from ultralytics import YOLO
-model = YOLO("yolov8n.pt")  # downloads automatically on first run
-results = model("image.jpg", classes=[0])  # class 0 = person only
+# Frontend (from frontend/)
+npm run dev
 ```
 
-### Density Classification
-```python
-def classify_density(person_count, frame_area):
-    density = person_count / frame_area * 10000  # people per 10k pixels
-
-    if density < 1:    return "Empty",    "green"
-    elif density < 3:  return "Light",    "yellow"
-    elif density < 6:  return "Moderate", "orange"
-    else:              return "Packed",   "red"
+PyTorch + CUDA was installed separately (required before requirements.txt):
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install -r backend/requirements.txt
 ```
-> Note: These thresholds are starting estimates. They will likely need tuning once real images are tested.
-
-### Heatmap Generation
-- Extract bounding box center coordinates from YOLO detections
-- Accumulate points into a NumPy array the size of the frame
-- Apply `cv2.GaussianBlur()` to spread heat around each point
-- Normalize and apply a colormap (`cv2.COLORMAP_JET`)
-- Blend with original frame using `cv2.addWeighted()`
 
 ---
 
-## Planned Features (by phase)
+## Current Status
 
-### Phase 1 — Static Image Upload ← START HERE
-- [ ] Upload an image via the dashboard
-- [ ] Backend runs YOLOv8 detection
-- [ ] Returns annotated image (bounding boxes drawn)
-- [ ] Person count displayed
-- [ ] Density label shown with color badge (Empty / Light / Moderate / Packed)
-- [ ] Heatmap overlay toggle
+### Phase 1 — Static Image Upload ✅ COMPLETE
+- Upload JPEG/PNG via drag-and-drop
+- YOLOv8s detects people (class 0), draws green bounding boxes with confidence scores
+- Returns: person count, density label + color badge, annotated image, heatmap overlay
+- Frontend: three-way image toggle (Detections / Heatmap / Original)
 
-### Phase 2 — Video File Upload
-- [ ] Upload a video file
-- [ ] Backend processes frame by frame
-- [ ] Returns crowd count over time as a graph
-- [ ] Summary stats (peak count, average density, duration)
+### Phase 2 — Video File Upload ✅ COMPLETE
+- Upload MP4/MOV/AVI/WebM video
+- Backend processes in a background job (avoids HTTP timeout on large files)
+- Samples 1 frame per second, runs YOLO on each
+- Frontend polls `/jobs/{job_id}` every second, shows progress bar
+- Results: Recharts line graph (crowd count over time), peak count, avg count, duration
+- Accepted formats: MP4, MOV, AVI, WebM
 
-### Phase 3 — Live Camera Feed
-- [ ] WebSocket connection from frontend to backend
-- [ ] Backend reads webcam or IP camera via `cv2.VideoCapture()`
-- [ ] Frames processed in real time, streamed back to frontend
-- [ ] Live updating count graph
-- [ ] Alert/notification when density exceeds a user-set threshold
+### Phase 3 — Live Camera Feed ❌ NOT BUILT — START HERE
+See detailed spec below.
+
+### Phase 4 — Accuracy Improvements (future)
+- Switch from YOLOv8 detection to a crowd estimation model (CSRNet, MCNN, etc.)
+- Detection-based models inherently undercount heavily occluded crowds (e.g. Shibuya crossing peak = ~30-40 detected vs 100+ actual). This is a fundamental YOLO limitation, not a tuning issue.
 
 ---
 
-## Folder Structure (planned, not yet created)
+## Folder Structure (actual, as of now)
 ```
 crowdsense/
 ├── backend/
-│   ├── main.py              # FastAPI app, all routes
-│   ├── detector.py          # YOLOv8 detection logic
+│   ├── main.py              # FastAPI app — all routes
+│   ├── detector.py          # YOLOv8s inference on images
 │   ├── density.py           # Density classification + heatmap generation
-│   ├── websocket.py         # Live feed WebSocket handler
+│   ├── video_processor.py   # Background video processing + in-memory job store
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Dashboard.jsx
-│   │   │   ├── UploadPanel.jsx
-│   │   │   ├── LiveFeed.jsx
-│   │   │   ├── HeatmapView.jsx
-│   │   │   └── CrowdGraph.jsx
-│   │   └── App.jsx
+│   │   │   ├── Dashboard.jsx       # Shell with Image/Video tabs
+│   │   │   ├── UploadPanel.jsx     # Image drag-and-drop upload
+│   │   │   ├── HeatmapView.jsx     # Annotated/Heatmap/Original toggle
+│   │   │   ├── VideoUploadPanel.jsx
+│   │   │   └── CrowdGraph.jsx      # Recharts line chart
+│   │   ├── App.jsx
+│   │   ├── index.css          # Tailwind import + dark background
+│   │   └── main.jsx
+│   ├── vite.config.js         # Tailwind v4 vite plugin, port 3000
 │   └── package.json
+├── samples/                   # Test images (committed); videos gitignored
+├── HANDOFF.md
 └── README.md
 ```
 
 ---
 
-## Environment Setup (Windows, first time)
+## Key Implementation Details
 
-```bash
-# Step 1 — Install CUDA Toolkit 12.x
-# Download from: https://developer.nvidia.com/cuda-downloads
+### Detection (backend/detector.py)
+- Model: `yolov8s.pt` loaded once at module import (not per-request)
+- `conf=0.25` — lower than default to catch small/distant people in wide shots
+- `imgsz=1280` — overrides YOLO's default 640px internal resize; critical for small people
+- `torch.no_grad()` — prevents VRAM accumulation across requests (without this, inference slows down after several requests)
+- `save=False` — prevents Ultralytics writing to a `runs/` directory
+- Images wider than 1280px are resized before processing (YOLO resizes internally anyway; this keeps response payload small)
 
-# Step 2 — Install PyTorch with CUDA
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+### Density Classification (backend/density.py)
+Uses a **hybrid** formula — absolute count OR pixel density, whichever triggers first:
+```python
+if person_count >= 30 or pixel_density >= 3:    → Packed   (red)
+if person_count >= 15 or pixel_density >= 1.5:  → Moderate (orange)
+if person_count >= 5  or pixel_density >= 0.5:  → Light    (yellow)
+else:                                            → Empty    (green)
+```
+Pure pixel-density was tried first and broke on wide-angle shots — 80 people spread across a large Shibuya crossing frame would score as "Empty". The hybrid fixes this by also keying on absolute count.
 
-# Step 3 — Install backend dependencies
-pip install fastapi uvicorn ultralytics opencv-python numpy pillow python-multipart websockets
+### Video Processing (backend/video_processor.py)
+- Jobs stored in a plain dict (`jobs: dict[str, dict]`) — fine for single-user local use
+- Samples every `fps * sample_interval` frames (default: 1 frame/sec)
+- Updates `jobs[job_id]["progress"]` in-place so the frontend can poll it
+- Temp file is written to disk, read by OpenCV, then deleted after processing
+- `video_processor.py` loads its own YOLO model instance (separate from `detector.py`) — this is a known duplication, fine for now
 
-# Step 4 — Verify GPU is available
-python -c "import torch; print(torch.cuda.is_available())"
-# Must print: True
+### Frontend
+- React + Tailwind v4 via `@tailwindcss/vite` plugin (NOT the old PostCSS setup)
+- Dark theme: `bg-[#0f1117]`
+- Dashboard has Image/Video tabs; switching tabs resets state
+- Video mode polls `/jobs/{job_id}` on a 1-second interval via `setInterval` in a `useEffect`; polling stops when status is `done` or `error`
+- Density badge colors map: `green → bg-green-500/20`, `yellow → bg-yellow-500/20`, `orange → bg-orange-500/20`, `red → bg-red-500/20`
 
-# Step 5 — Set up React frontend
-npx create-react-app crowdsense-frontend
-cd crowdsense-frontend
-npm install tailwindcss recharts axios
+### CORS
+Wide-open `allow_origins=["*"]` in `main.py` — fine for local dev.
+
+---
+
+## What Was Tried / Lessons Learned
+
+| Problem | What Failed | What Worked |
+|---|---|---|
+| VRAM grows after several images | No fix (default YOLO) | `torch.no_grad()` + `save=False` |
+| Slow processing on large images | N/A | Resize to max 1280px before processing |
+| Video upload timing out | Synchronous processing in one request | `BackgroundTasks` + job polling |
+| Tokyo crowd detected as "Empty" | Pure pixel-density formula | Hybrid absolute-count + pixel-density |
+| Low detection count on distant people | `yolov8n` + `conf=0.4` + `imgsz=640` | `yolov8s` + `conf=0.25` + `imgsz=1280` |
+| Shibuya crossing still undercounts (~30-40 vs 100+) | Cannot fix with YOLO | Accepted for now; Phase 4 = CSRNet |
+
+---
+
+## Phase 3 Spec — Live Camera Feed (BUILD THIS NEXT)
+
+### What to build
+A new **Live** tab in the dashboard that streams a live camera feed, runs YOLO on each frame, and displays:
+- Live annotated video (canvas or `<img>` updated with MJPEG frames)
+- Real-time crowd count (updating number)
+- Real-time density badge
+- Live crowd count graph that scrolls as time passes (last N seconds)
+- Alert when density exceeds a user-set threshold (e.g. "Alert me at Packed")
+
+### Camera sources (user wants BOTH selectable in UI)
+1. **Webcam** — `cv2.VideoCapture(0)` (index 0 = default webcam)
+2. **IP camera / RTSP stream** — `cv2.VideoCapture("rtsp://...")` or any URL OpenCV can open
+
+### Recommended approach: WebSocket
+- Frontend connects to `ws://localhost:8000/ws/live`
+- Backend sends a JSON message per frame:
+  ```json
+  {
+    "frame": "<base64 JPEG>",
+    "person_count": 7,
+    "density_label": "Light",
+    "density_color": "yellow",
+    "timestamp": 1.23
+  }
+  ```
+- Frontend decodes base64 and sets it as the `src` of an `<img>` tag
+- Resize frames to max 640px wide before sending (bandwidth) — this is different from the 1280 used for accuracy in image/video mode; live feed prioritises latency
+- Encode as JPEG at 80% quality before sending
+- Run YOLO every frame if GPU keeps up, otherwise every 2nd frame
+
+### New files to create
+- `backend/live_feed.py` — WebSocket handler, camera capture loop
+- `frontend/src/components/LiveFeed.jsx` — live view with source selector, threshold alert, scrolling graph
+
+### Add to Dashboard.jsx
+Add a third tab "Live" alongside "Image" and "Video".
+
+### Things to watch out for
+- **Camera already in use:** `cv2.VideoCapture(0)` will fail silently if another app has the camera. Return a clear error to the frontend.
+- **Stopping the feed:** The WebSocket disconnect should release the `cv2.VideoCapture` object. Use a `try/finally` block.
+- **Only one live session at a time:** Don't start a second capture if one is already running. Track this with a module-level flag in `live_feed.py`.
+- **RTSP streams:** Some IP cameras need `cv2.CAP_FFMPEG` backend: `cv2.VideoCapture(url, cv2.CAP_FFMPEG)`. Add this as a fallback.
+- **Frame rate:** The 3060 can do 50+ FPS with yolov8s at imgsz=640. For live feed, cap at 15-20 FPS to avoid flooding the WebSocket. Use `asyncio.sleep(1/20)` between frames.
+- **Scrolling graph:** Keep a fixed-length deque (e.g. last 60 seconds) in frontend state and append each incoming count.
+- **Threshold alert:** A simple check `if density_label === alertThreshold` in the frontend is enough — no backend change needed.
+
+### WebSocket endpoint skeleton
+```python
+# backend/live_feed.py
+from fastapi import WebSocket
+import cv2, asyncio, base64, json, torch
+from ultralytics import YOLO
+from density import classify_density
+
+model = YOLO("yolov8s.pt")
+_active = False  # prevent multiple concurrent sessions
+
+async def live_feed_ws(websocket: WebSocket, source: str):
+    global _active
+    await websocket.accept()
+    if _active:
+        await websocket.send_json({"error": "A live session is already active."})
+        await websocket.close()
+        return
+
+    cap_source = 0 if source == "webcam" else source
+    cap = cv2.VideoCapture(cap_source)
+    _active = True
+    try:
+        with torch.no_grad():
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                # resize → detect → encode → send
+                ...
+                await asyncio.sleep(1 / 20)  # ~20 FPS cap
+    finally:
+        cap.release()
+        _active = False
+```
+
+Register it in `main.py`:
+```python
+from live_feed import live_feed_ws
+
+@app.websocket("/ws/live")
+async def websocket_live(websocket: WebSocket, source: str = "webcam"):
+    await live_feed_ws(websocket, source)
 ```
 
 ---
 
-## What Has Been Tried / Built
-**Nothing has been implemented in code yet.** All of the above is planned and decided through conversation. The next step is writing the first lines of code.
-
----
-
-## What To Build First
-Start with `backend/detector.py` and `backend/main.py` to get Phase 1 working:
-
-1. `detector.py` — load YOLOv8, run inference on an image, return bounding boxes + count
-2. `density.py` — take count + frame dimensions, return density label + color
-3. `main.py` — FastAPI app with a single `/detect` POST endpoint that accepts an image file and returns:
-   ```json
-   {
-     "person_count": 12,
-     "density_label": "Moderate",
-     "density_color": "orange",
-     "annotated_image": "<base64 encoded jpg>"
-   }
-   ```
-4. Test the endpoint works with a tool like Postman or curl before touching the frontend
-5. Then build the React `UploadPanel.jsx` and `Dashboard.jsx` to connect to it
-
----
-
-## Known Risks / Things To Watch Out For
-- **CUDA not detected:** Make sure CUDA Toolkit version matches the PyTorch install URL. Run the verify command above before anything else.
-- **Density thresholds:** The `classify_density()` thresholds are rough estimates. Expect to tune them after testing on real images.
-- **Live feed latency:** WebSocket streaming of full frames can be slow. Consider resizing frames to 640px wide before sending, and encoding as JPEG at ~80% quality to reduce bandwidth.
-- **CORS issues:** When React (port 3000) calls FastAPI (port 8000), you will hit CORS errors. Add this to `main.py`:
-  ```python
-  from fastapi.middleware.cors import CORSMiddleware
-  app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-  ```
-- **Large video files:** Processing video frame by frame in a single request will time out. Use background tasks or a job queue (FastAPI BackgroundTasks is fine for now).
-
----
-
-## User Preferences / Context
+## User Preferences
 - Prefers clear, well-commented code
-- Personal project — no strict deadlines, no course requirements
-- Wants to eventually get to live camera feed but is happy starting with static images
-- Will be using VS Code on Windows
-- GitHub repo will be created by the user before development starts
-- Has no existing codebase — everything starts from scratch
+- Personal project — no deadlines
+- Using VS Code on Windows
+- GitHub: https://github.com/realkyle/CrowdSense
 
 ---
 
 ## Suggested First Message To Next Agent
-> "Here is my HANDOFF.md for the CrowdSense project. Please read it and then write the starter code for `backend/detector.py`, `backend/density.py`, and `backend/main.py` to get Phase 1 working — static image upload with YOLOv8 detection, density classification, and a `/detect` endpoint that returns JSON with the annotated image."
+> "Here is the updated HANDOFF.md for the CrowdSense project. Phase 1 (image upload) and Phase 2 (video processing) are fully built and working. Please read this file and build Phase 3 — the live camera feed. Start with `backend/live_feed.py` and `frontend/src/components/LiveFeed.jsx`, then add a Live tab to `Dashboard.jsx`. The spec and skeleton code are in the Phase 3 section of this file."
