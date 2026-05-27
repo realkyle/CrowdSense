@@ -5,7 +5,9 @@ from ultralytics import YOLO
 
 # Load model once at import time — avoids reloading on every request.
 # "yolov8n.pt" downloads automatically on first run (~6MB).
-model = YOLO("yolov8n.pt")
+# yolov8s (small) has ~3x more parameters than yolov8n and detects small/distant
+# people much better. Still runs at 50+ FPS on the RTX 3060.
+model = YOLO("yolov8s.pt")
 
 
 def detect_people(image_bytes: bytes) -> dict:
@@ -44,7 +46,9 @@ def detect_people(image_bytes: bytes) -> dict:
     # conf=0.25 catches small/distant people (e.g. wide-angle crowd shots) that
     # 0.4 would miss. Lower values increase false positives on non-crowd images.
     with torch.no_grad():
-        results = model.predict(frame, classes=[0], device="cuda", conf=0.25, verbose=False, save=False)
+        # imgsz=1280 runs inference at full resolution instead of YOLO's default
+        # 640px — critical for detecting small/distant people in wide-angle shots.
+        results = model.predict(frame, classes=[0], device="cuda", conf=0.25, imgsz=1280, verbose=False, save=False)
 
     boxes = []
     annotated = frame.copy()

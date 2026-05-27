@@ -8,7 +8,7 @@ from density import classify_density
 
 # Reuse the same model instance as detector.py would, but we load it here
 # independently so video_processor can be imported on its own.
-model = YOLO("yolov8n.pt")
+model = YOLO("yolov8s.pt")
 
 # In-memory job store: job_id → job dict.
 # Fine for a single-user local app; would be replaced with Redis/DB in production.
@@ -63,7 +63,7 @@ def process_video(job_id: str, video_path: str, sample_interval: float = 1.0):
                     frame = cv2.resize(frame, (MAX_WIDTH, int(h * scale)), interpolation=cv2.INTER_AREA)
                     h, w = frame.shape[:2]
 
-                results = model.predict(frame, classes=[0], device="cuda", conf=0.25, verbose=False, save=False)
+                results = model.predict(frame, classes=[0], device="cuda", conf=0.25, imgsz=1280, verbose=False, save=False)
                 count = sum(len(r.boxes) for r in results)
                 label, color = classify_density(count, w, h)
 
