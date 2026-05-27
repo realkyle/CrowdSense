@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 # Load model once at import time — avoids reloading on every request.
@@ -28,9 +29,20 @@ def detect_people(image_bytes: bytes) -> dict:
 
     h, w = frame.shape[:2]
 
-    # Run inference — classes=[0] restricts to "person" only, device="cuda" uses the GPU.
-    # conf=0.4 filters weak detections to reduce false positives.
-    results = model.predict(frame, classes=[0], device="cuda", conf=0.4, verbose=False)
+    # Resize large images down to max 1280px wide before processing.
+    # YOLO resizes to 640x640 internally anyway, so detection quality is unaffected.
+    # This keeps the heatmap, annotated image, and response payload a manageable size.
+    MAX_WIDTH = 1280
+    if w > MAX_WIDTH:
+        scale = MAX_WIDTH / w
+        frame = cv2.resize(frame, (MAX_WIDTH, int(h * scale)), interpolation=cv2.INTER_AREA)
+        h, w = frame.shape[:2]
+
+    # torch.no_grad() prevents PyTorch from accumulating computation graphs across
+    # requests — without it, VRAM slowly fills up and inference gets slower over time.
+    # save=False stops Ultralytics from writing annotated images to a runs/ directory.
+    with torch.no_grad():
+        results = model.predict(frame, classes=[0], device="cuda", conf=0.4, verbose=False, save=False)
 
     boxes = []
     annotated = frame.copy()
